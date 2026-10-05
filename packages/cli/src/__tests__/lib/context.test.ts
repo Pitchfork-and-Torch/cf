@@ -183,5 +183,15 @@ describe("context", () => {
 				/Invalid compliance region/
 			);
 		});
+
+		it("does not require a loadable cloudflare.config.ts when the env region is set", async () => {
+			writeFileSync(
+				join(process.cwd(), "cloudflare.config.ts"),
+				`export default () => { throw new Error("Project config should not be required"); };`
+			);
+			vi.stubEnv("CLOUDFLARE_COMPLIANCE_REGION", "public");
+
+			await expect(getComplianceRegion()).resolves.toBe("public");
+		});
 	});
 });

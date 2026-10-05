@@ -213,21 +213,38 @@ let complianceRegionConflictsReported = false;
 async function resolveComplianceRegion(
 	options: { isPreview?: boolean } = {}
 ): Promise<ComplianceRegion | undefined> {
-	const preloadedProjectSettings = getLoadedProjectSettings(undefined, options);
-	const projectSettings =
-		preloadedProjectSettings === undefined
-			? await loadProjectSettings(undefined, options)
-			: preloadedProjectSettings;
-	const configuredValue = projectSettings?.settings?.complianceRegion;
-	const configureRegion = normalizeComplianceRegion(
-		configuredValue,
-		"cloudflare.config.ts"
-	);
+	// Mirror resolveAccountId: honour the environment before touching
+	// cloudflare.config.ts. Account-level API commands still call this path,
+	// and a broken project config must not abort them when the region is
+	// already supplied by CLOUDFLARE_COMPLIANCE_REGION (cloudflare/cf#207).
 	const envValue = process.env.CLOUDFLARE_COMPLIANCE_REGION;
 	const envRegion = normalizeComplianceRegion(
 		envValue,
 		"CLOUDFLARE_COMPLIANCE_REGION"
 	);
+
+	let configuredValue: string | undefined;
+	let configureRegion: ComplianceRegion | undefined;
+	try {
+		const preloadedProjectSettings = getLoadedProjectSettings(
+			undefined,
+			options
+		);
+		const projectSettings =
+			preloadedProjectSettings === undefined
+				? await loadProjectSettings(undefined, options)
+				: preloadedProjectSettings;
+		configuredValue = projectSettings?.settings?.complianceRegion;
+		configureRegion = normalizeComplianceRegion(
+			configuredValue,
+			"cloudflare.config.ts"
+		);
+	} catch (error) {
+		if (!envRegion) {
+			throw error;
+		}
+		// Env already resolved the region; ignore unloadable project config.
+	}
 
 	if (!envRegion) {
 		return configureRegion;
